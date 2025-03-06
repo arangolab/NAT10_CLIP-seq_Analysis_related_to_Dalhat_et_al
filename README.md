@@ -1,6 +1,6 @@
-# CLIPseq-Analysis
-## CLIPseq Overview
-Paired-end Illumina Novaseq X Plus sequencing was performed to capture protein to RNA binding information. ** ADD **
+# seCLIPseq-Analysis
+## seCLIPseq Overview
+Paired-end Illumina Novaseq X Plus seCLIP-seq was performed using a NAT10 antibody paired with input samples to capture NAT10-RNA binding sites.
 
 ## FASTQ to bigWig Pipeline
 Raw reads were pre-processed to remove low quality bases, adapter sequences, and a stretch of at least 10 consecutive guanine (G) nucleotides at the 3’ end using cutadapt v 4.2. It was necessary to remove long stretches of G’s and ``` --nextseq-trim=10 ``` due to the sequencing instrument reporting high quality G’s in the absence of signal towards the end of the read.
@@ -23,22 +23,19 @@ STAR --runMode alignReads --genomeDir <INDEXED HG38 FASTA REFERENCE> --readFiles
 --outReadsUnmapped Fastx --outFilterScoreMin 10 --outSAMattrRGline ID:foo SM:<FILE NAME> \
 --alignEndsType Local --limitOutSJcollapsed 2000000 > <OUTPUT BAM>
 ```
-Separately, reads were also aligned to a small genome containing rRNA, tRNA, and snoRNA sequences using Bowtie2 v 2.5.4. 
+All alignments were sorted and indexed using samtools v 1.6.
 ```
-bowtie2 -q --local -x <INDEXED RNA FASTA REFERENCE> -1 <FASTQ R1> -2 <FASTQ R2> -S <OUTPUT SAM>
-```
-All alignments were sorted and indexed using samtools v 1.6. Code varies slightly whether BAM or SAM is the input.
-```
-samtools view -bS <INPUT SAM> | samtools sort -o <OUTPUT SORTED BAM> -
-samtools index <OUTPUT INDEXED BAM>
+samtools sort -T <TEMPORARY FILENAME> -o <OUTPUT SORTED BAM> <INPUT BAM> ||
+samtools index <OUTPUT SORTED & INDEXED BAM>
 ```
 All alignments were deduplicated using UMI-tools v 1.1.5.
 ```
 umi_tools dedup -I <BAM> --paired -S <DEDUPLICATED BAM>
 ```
-**R1/R2** reads were extracted from the alignments using samtools to obtain reads containing information about the reverse transcription stop. 
+R1 reads were extracted from the alignments using samtools to obtain reads containing information about the reverse transcription stop. 
 ```
-ADD LATER
+samtools view -hb -f 66 <INPUT BAM> -o <R1 BAM>
+samtools index <INDEXED R1 BAM>
 ```
 These alignments were converted to bigWig files normalized by reads per kilobase per million mapped reads (RPKM) using Deeptools v 3.5.1. 
 ```
