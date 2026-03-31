@@ -38,6 +38,11 @@ These deduplicated alignments were converted to bigWig files normalized by reads
 ```
 bamCoverage -b <BAM> -o <OUTPUT BIGWIG> --outFileFormat bigwig --normalizeUsing RPKM --binSize 1
 ```
+
+## Analysis of NAT10 peaks over 18S rRNA.
+BigWig files were analyzed using custom R code; see the file bigwig_analysis.Rmd for a complete analysis
+
+# Alternative: extraction of R1 reads.
 R1 reads were extracted from the alignments using samtools to obtain reads containing information about the reverse transcription stop. 
 ```
 samtools view -hb -f 66 <INPUT BAM> -o <R1 BAM>
@@ -47,7 +52,5 @@ These alignments were converted to bigWig files normalized by reads per kilobase
 ```
 bamCoverage -b <BAM> -o <OUTPUT BIGWIG> --outFileFormat bigwig --normalizeUsing RPKM --binSize 1
 ```
-
-## Analysis of NAT10 peaks over 18S rRNA.
 
 
