@@ -1,0 +1,305 @@
+---
+title: "bigwig_analysis"
+author: "Daniel Arango"
+date: "2/24/2026"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r bigwig, message = FALSE, warning = FALSE, fig.width=4, fig.height=3, fig.path='R/', dev=c('png', 'pdf')}
+
+# ===============================
+# Load libraries
+# ===============================
+library(rtracklayer)
+library(GenomicRanges)
+library(dplyr)
+library(tidyr)
+
+# ===============================
+# Detect all BigWig files
+# ===============================
+bw_files <- c("SN1.bw", "SN2.bw", "SN4.bw", "SN5.bw", "SN6.bw", "SN7.bw", "SN9.bw", "SN10.bw", "SL1.bw", "SL2.bw", "SL4.bw", "SL5.bw", "SL6.bw", "SL7.bw", "SL9.bw", "SL10.bw", "SL11.bw", "SL12.bw", "SL14.bw", "SL15.bw", "SL16.bw", "SL17.bw", "SL19.bw", "SL20.bw" )
+
+# ===============================
+# Define genomic region
+# ===============================
+chr <- "GL000220.1" # Specify the chromosome 
+start <- 109078 # Start position 
+end <- 110946 # End position
+
+region <- GRanges(seqnames = chr, ranges = IRanges(start = start, end = end))
+
+# ===============================
+# Safe BigWig extraction function
+# ===============================
+# Initialize a data frame to store results 
+positions <- seq(start, end)
+results <- data.frame(Position = positions) 
+
+# Loop through each sample 
+for (file in bw_files) { 
+  sample_name <- basename(file) # Extract sample name from file path 
+bw_data <- import(file, which = region) 
+
+# Extract RPKM values 
+rpkm_values <- as.data.frame(bw_data)[, "score"] # Adjust "score" if needed 
+
+# Ensure rpkm_values is of the same length as positions 
+if (length(rpkm_values) < length(positions)) { 
+  
+  # Fill with 0 for missing positions 
+  rpkm_values <- c(rpkm_values, rep(0, length(positions) - length(rpkm_values))) 
+  } 
+
+# Add RPKM values to the results data frame 
+results[[sample_name]] <- rpkm_values[1:length(positions)] # Align length 
+}
+
+
+# ===============================
+# Define subtraction pairs
+# ===============================
+pairs <- tribble(
+  ~new_name,       ~clip,       ~input,
+  "parental_1",    "SN6.bw",    "SN1.bw",
+  "parental_2",    "SL6.bw",    "SL1.bw",
+  "parental_3",    "SL16.bw",   "SL11.bw",
+  "pDA98_1",       "SN7.bw",    "SN2.bw",
+  "pDA98_2",       "SL7.bw",    "SL2.bw",
+  "pDA98_3",       "SL17.bw",   "SL12.bw",
+  "pDA154_1",      "SN9.bw",    "SN4.bw",
+  "pDA154_2",      "SL9.bw",    "SL4.bw",
+  "pDA154_3",      "SL19.bw",   "SL14.bw",
+  "pDA156_1",      "SN10.bw",   "SN5.bw",
+  "pDA156_2",      "SL10.bw",   "SL5.bw",
+  "pDA156_3",      "SL20.bw",   "SL15.bw"
+)
+
+
+#Reference
+#pDA98 = NAT10-WT
+#pDA154 = E389L
+#pDA156 = K290A
+
+# ===============================
+# Perform safe subtraction
+# ===============================
+InputSubtracted <- data.frame(
+  Position = positions - start + 1
+)
+
+for (i in seq_len(nrow(pairs))) {
+  
+  clip_name  <- pairs$clip[i]
+  input_name <- pairs$input[i]
+  new_name   <- pairs$new_name[i]
+  
+  if (clip_name %in% names(results) &&
+      input_name %in% names(results)) {
+    
+    InputSubtracted[[new_name]] <-
+      results[[clip_name]] - results[[input_name]]
+    
+  } else {
+    
+    warning("Skipping subtraction for: ", new_name,
+            " (missing file column)")
+  }
+}
+
+InputSubtracted[, -1] <- lapply(
+  InputSubtracted[, -1],
+  function(x) x / max(x, na.rm = TRUE)
+)
+
+```
+
+
+```{r plots, message = FALSE, warning = FALSE, fig.width=6, fig.height=2, fig.path='plots/', dev=c('png', 'pdf')}
+
+# ===============================
+# Libraries
+# ===============================
+library(ggplot2)
+library(zoo)
+
+# ===============================
+# Parameters
+# ===============================
+window_size <- 20   # smoothing window
+y_max <- 1          # fixed y-axis limit
+
+# ===============================
+# Define groups
+# ===============================
+groups <- list(
+  pDA98 = grep("^pDA98_", names(InputSubtracted), value = TRUE),
+  pDA154 = grep("^pDA154_", names(InputSubtracted), value = TRUE),
+  pDA156 = grep("^pDA156_", names(InputSubtracted), value = TRUE),
+  parental = grep("^parental_", names(InputSubtracted), value = TRUE)
+)
+
+# ===============================
+# Smooth replicates, compute mean + SEM
+# ===============================
+plot_data_list <- lapply(names(groups), function(g) {
+  cols <- groups[[g]]
+  
+  # Smooth each replicate first
+  smoothed_reps <- apply(InputSubtracted[, cols], 2, function(x) {
+    zoo::rollmean(x, k = window_size, fill = NA, align = "center")
+  })
+  
+  # Compute mean and SEM
+  mean_signal <- rowMeans(smoothed_reps, na.rm = TRUE)
+  sem_signal  <- apply(smoothed_reps, 1, function(x) sd(x, na.rm = TRUE)/sqrt(length(x)))
+  
+  # Clip negatives
+  mean_signal <- pmax(mean_signal, 0)
+  sem_signal  <- pmax(sem_signal, 0)
+  
+  data.frame(
+    Position = InputSubtracted$Position,
+    mean_signal = mean_signal,
+    sem_signal  = sem_signal,
+    group = g
+  )
+})
+
+plot_data_long <- do.call(rbind, plot_data_list)
+
+# ===============================
+# Plot with ribbons
+# ===============================
+for(g in unique(plot_data_long$group)) {
+  df <- subset(plot_data_long, group == g)
+  
+  p <- ggplot(df, aes(x = Position, y = mean_signal)) +
+    
+    # Area under the curve
+    geom_area(fill = "blue", alpha = 0.4) +
+    
+    # Line on top
+    geom_line(color = "blue", size = 1) +
+    
+    coord_cartesian(ylim = c(0, y_max)) +
+    scale_x_continuous(
+      expand = c(0,0),
+      breaks = seq(0, max(plot_data_long$Position), by = 200)
+    ) +
+    scale_y_continuous(expand = c(0,0), limits = c(0, y_max)) +
+    theme_classic() +
+    labs(
+      y = "Mean Signal",
+      title = paste0(g, " (smoothed)")
+    )
+  
+  print(p)
+}
+
+```
+
+
+```{r colored, message = FALSE, warning = FALSE, fig.width=6, fig.height=2, fig.path='plots/', dev=c('png', 'pdf')}
+
+# ===============================
+# Libraries
+# ===============================
+library(ggplot2)
+library(zoo)
+
+# ===============================
+# Parameters
+# ===============================
+window_size <- 20   # smoothing window
+y_max <- 1          # fixed y-axis limit
+
+# ===============================
+# Define groups
+# ===============================
+groups <- list(
+  pDA98 = grep("^pDA98_", names(InputSubtracted), value = TRUE),
+  pDA154 = grep("^pDA154_", names(InputSubtracted), value = TRUE),
+  pDA156 = grep("^pDA156_", names(InputSubtracted), value = TRUE),
+  parental = grep("^parental_", names(InputSubtracted), value = TRUE)
+)
+
+# ===============================
+# Smooth replicates, compute mean + SEM
+# ===============================
+plot_data_list <- lapply(names(groups), function(g) {
+  cols <- groups[[g]]
+  
+  # Smooth each replicate first
+  smoothed_reps <- apply(InputSubtracted[, cols], 2, function(x) {
+    zoo::rollmean(x, k = window_size, fill = NA, align = "center")
+  })
+  
+  # Compute mean and SEM
+  mean_signal <- rowMeans(smoothed_reps, na.rm = TRUE)
+  sem_signal  <- apply(smoothed_reps, 1, function(x) sd(x, na.rm = TRUE)/sqrt(length(x)))
+  
+  # Clip negatives
+  mean_signal <- pmax(mean_signal, 0)
+  sem_signal  <- pmax(sem_signal, 0)
+  
+  data.frame(
+    Position = InputSubtracted$Position,
+    mean_signal = mean_signal,
+    sem_signal  = sem_signal,
+    group = g
+  )
+})
+
+plot_data_long <- do.call(rbind, plot_data_list)
+
+# ===============================
+# Plot with ribbons and colored regions
+# ===============================
+for(g in unique(plot_data_long$group)) {
+  df <- subset(plot_data_long, group == g)
+  
+  # Define region colors
+  df$region <- with(df,
+    ifelse(Position >= 1000 & Position <= 1300, "blue",
+    ifelse(Position >= 1600, "cyan", "gray"))
+  )
+  
+  p <- ggplot(df, aes(x = Position, y = mean_signal)) +
+    
+    # Area under the curve colored by region
+    geom_area(aes(fill = region), alpha = 0.4) +
+    
+    # Line on top
+    geom_line(color = "black", size = 1) +
+    
+    # Define manual colors
+    scale_fill_manual(
+      values = c(
+        "blue" = "blue",
+        "cyan" = "cyan",
+        "gray" = "gray"
+      )
+    ) +
+    
+    coord_cartesian(ylim = c(0, y_max)) +
+    scale_x_continuous(
+      expand = c(0,0),
+      breaks = seq(0, max(plot_data_long$Position), by = 200)
+    ) +
+    scale_y_continuous(expand = c(0,0), limits = c(0, y_max)) +
+    theme_classic() +
+    labs(
+      y = "Mean Signal",
+      title = paste0(g, " (smoothed)")
+    )
+  
+  print(p)
+}
+
+```
