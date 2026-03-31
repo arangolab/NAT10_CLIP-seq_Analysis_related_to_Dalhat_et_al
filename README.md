@@ -32,6 +32,12 @@ All alignments were deduplicated using UMI-tools v 1.1.5.
 ```
 umi_tools dedup -I <BAM> --paired -S <DEDUPLICATED BAM>
 ```
+
+These deduplicated alignments were converted to bigWig files normalized by reads per kilobase per million mapped reads (RPKM) using Deeptools v 3.5.1. 
+
+```
+bamCoverage -b <BAM> -o <OUTPUT BIGWIG> --outFileFormat bigwig --normalizeUsing RPKM --binSize 1
+```
 R1 reads were extracted from the alignments using samtools to obtain reads containing information about the reverse transcription stop. 
 ```
 samtools view -hb -f 66 <INPUT BAM> -o <R1 BAM>
@@ -41,4 +47,7 @@ These alignments were converted to bigWig files normalized by reads per kilobase
 ```
 bamCoverage -b <BAM> -o <OUTPUT BIGWIG> --outFileFormat bigwig --normalizeUsing RPKM --binSize 1
 ```
-bigWig files were visualized using Integrative Genomics Viewer v 2.19.1 web interface.
+
+## Analysis of NAT10 peaks over 18S rRNA.
+
+
