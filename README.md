@@ -1,5 +1,5 @@
-# eCLIPseq-Analysis
-## eCLIPseq Overview
+# eCLIP-seq-Analysis
+## eCLIP-seq Overview
 Paired-end Illumina Novaseq X Plus eCLIP-seq was performed using a NAT10 antibody paired with input samples to capture NAT10-RNA binding sites.
 
 ## FASTQ to bigWig Pipeline
