@@ -1,0 +1,367 @@
+---
+title: "RT_STOP"
+author: "Daniel Arango"
+date: "3/06/2026"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#pDA102 is NAT10(-)
+#pDA98 is NAT10-WT
+#pDA154 is E389L (helicase mutant)
+#pDA156 is K290V (helicase mutant)
+
+```{r bigwig, message = FALSE, warning = FALSE, fig.width=6, fig.height=2, fig.path='plots/', dev=c('png', 'pdf')}
+
+# ===============================
+# Libraries
+# ===============================
+library(tidyverse)
+library(rtracklayer)
+library(GenomicRanges)
+
+# ===============================
+# BigWig files (your dataset)
+# ===============================
+# Make sure the file paths are correct
+bw_files <- c(
+  "SN2.bw","SN3.bw","SN4.bw","SN5.bw",
+  "SL2.bw","SL4.bw","SL5.bw",
+  "SL12.bw","SL13.bw","SL14.bw","SL15.bw"
+)
+
+# ===============================
+# Replicate structure
+# ===============================
+samples <- tribble(
+  ~Genotype, ~rep1, ~rep2, ~rep3,
+  "pDA98",    "SN2.bw", "SL2.bw", "SL12.bw",
+  "pDA102",   "SN3.bw", NA,       "SL13.bw",
+  "pDA154",   "SN4.bw", "SL4.bw", "SL14.bw",
+  "pDA156",   "SN5.bw", "SL5.bw", "SL15.bw"
+)
+
+# ===============================
+# Genomic region
+# ===============================
+chr <- "GL000220.1"
+start <- 110315
+end   <- 110335
+
+# ===============================
+# Function to extract per-base RPKM
+# ===============================
+extract_signal <- function(bw_file){
+  if(is.na(bw_file)) return(NULL)
+  
+  gr <- GRanges(chr, IRanges(start, end))
+  
+  # Import as NumericList (per-base values)
+  sig <- import(bw_file, which = gr, as = "NumericList")[[1]]
+  
+  tibble(
+    position = start:end,
+    RPKM = sig
+  )
+}
+
+# ===============================
+# Extract signal for all replicates
+# ===============================
+all_data <- samples %>%
+  pivot_longer(cols = starts_with("rep"), values_to = "bw") %>%
+  filter(!is.na(bw)) %>%
+  mutate(data = map(bw, extract_signal)) %>%
+  unnest(data)
+
+# ===============================
+# Average per Genotype per position
+# ===============================
+avg_signal <- all_data %>%
+  group_by(Genotype, position) %>%
+  summarise(
+    mean_RPKM = mean(RPKM, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+###---------------------------------------
+###Kolmogorov-Smirnov test (KS test)
+###---------------------------------------
+
+# Get pDA98 profile
+pDA98_vals <- avg_signal %>%
+  filter(Genotype == "pDA98") %>%
+  pull(mean_RPKM)
+
+# Compare each other genotype to pDA98
+genotypes <- setdiff(unique(avg_signal$Genotype), "pDA98")
+
+ks_results <- map_dfr(genotypes, function(g){
+  
+  vals <- avg_signal %>%
+    filter(Genotype == g) %>%
+    pull(mean_RPKM)
+  
+  test <- ks.test(vals, pDA98_vals)
+  
+  tibble(
+    Genotype = g,
+    D = test$statistic,
+    p_value = test$p.value
+  )
+})
+
+ks_results
+
+# ===============================
+# Define color palette
+# ===============================
+palette <- c(
+  "pDA102" = "black",
+  "pDA98"  = "blue",
+  "pDA154" = "red",
+  "pDA156" = "darkred"
+)
+
+# ===============================
+# Prepare KS results for plotting
+# ===============================
+# Add a row for pDA98 itself
+ks_results_plot <- ks_results %>%
+  bind_rows(tibble(Genotype = "pDA98", D = NA, p_value = NA)) %>%
+  # Make a nice label
+  mutate(p_label = ifelse(is.na(p_value), "reference", paste0("KS p = ", signif(p_value, 3))))
+
+# ===============================
+# Plots with KS p-value in title
+# ===============================
+plots <- list()
+for(g in unique(avg_signal$Genotype)) {
+  
+  df <- avg_signal %>% filter(Genotype == g)
+  ks_label <- ks_results_plot %>% filter(Genotype == g) %>% pull(p_label)
+  
+  p <- ggplot(df, aes(x = factor(position), y = mean_RPKM, fill = Genotype)) +
+    geom_col(width = 1) +
+    scale_fill_manual(values = palette) +
+    theme_classic(base_size = 14) +
+    labs(
+      x = "Genomic position",
+      y = "Average RPKM",
+      title = paste0("Genotype: ", g, " (", ks_label, ")")
+    ) +
+    theme(
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+      legend.position = "none"
+    )
+  
+  plots[[g]] <- p
+}
+
+# Display plots
+plots[["pDA102"]]
+plots[["pDA98"]]
+plots[["pDA154"]]
+plots[["pDA156"]]
+
+
+```
+
+```{r bigwig_replicates, message = FALSE, warning = FALSE, fig.width=6, fig.height=2, fig.path='plots/', dev=c('png', 'pdf')}
+
+# ===============================
+# Libraries
+# ===============================
+library(tidyverse)
+library(rtracklayer)
+library(GenomicRanges)
+
+# ===============================
+# BigWig files (your dataset)
+# ===============================
+bw_files <- c(
+  "SN2.bw","SN3.bw","SN4.bw","SN5.bw",
+  "SL2.bw","SL4.bw","SL5.bw",
+  "SL12.bw","SL13.bw","SL14.bw","SL15.bw"
+)
+
+# ===============================
+# Replicate structure
+# ===============================
+samples <- tribble(
+  ~Genotype, ~rep1, ~rep2, ~rep3,
+  "pDA98",    "SN2.bw", "SL2.bw", "SL12.bw",
+  "pDA102",   "SN3.bw", NA,       "SL13.bw",
+  "pDA154",   "SN4.bw", "SL4.bw", "SL14.bw",
+  "pDA156",   "SN5.bw", "SL5.bw", "SL15.bw"
+)
+
+# ===============================
+# Genomic region
+# ===============================
+chr <- "GL000220.1"
+start <- 110315
+end   <- 110335
+
+# ===============================
+# Function to extract per-base RPKM
+# ===============================
+extract_signal <- function(bw_file){
+  if(is.na(bw_file)) return(NULL)
+  
+  gr <- GRanges(chr, IRanges(start, end))
+  
+  # Import as NumericList (per-base values)
+  sig <- import(bw_file, which = gr, as = "NumericList")[[1]]
+  
+  tibble(
+    position = start:end,
+    RPKM = sig
+  )
+}
+
+# ===============================
+# Extract signal for all replicates
+# ===============================
+all_data <- samples %>%
+  pivot_longer(cols = starts_with("rep"), values_to = "bw") %>%
+  filter(!is.na(bw)) %>%
+  mutate(data = map(bw, extract_signal)) %>%
+  unnest(data)
+
+# ===============================
+# Exclude parental if present
+# ===============================
+replicate_data <- all_data
+
+```
+
+```{r RT_STOP, message = FALSE, warning = FALSE, fig.width=4, fig.height=3, fig.path='plots/', dev=c('png', 'pdf')}
+# ===============================
+# Compute mean RPKM per replicate per subregion
+# ===============================
+
+regions <- tibble(
+  region_name = c("region1", "region2"),
+  start = c(110315, 110326),
+  end   = c(110324, 110335)
+)
+
+replicate_means <- replicate_data %>%
+  # For each region
+  group_by(Genotype, bw) %>%
+  nest() %>% 
+  crossing(regions) %>%    # combine each replicate with each region
+  mutate(
+    mean_RPKM = map2_dbl(data, region_name, function(df, rname){
+      r_start <- regions$start[regions$region_name == rname]
+      r_end   <- regions$end[regions$region_name == rname]
+      mean(df$RPKM[df$position >= r_start & df$position <= r_end], na.rm=TRUE)
+    })
+  ) %>%
+  select(Genotype, bw, region_name, mean_RPKM) %>%
+  arrange(Genotype, bw, region_name)
+
+replicate_means
+
+# ===============================
+# Compute percent per replicate
+# ===============================
+replicate_values <- replicate_means %>%
+  pivot_wider(names_from = region_name, values_from = mean_RPKM) %>%
+  mutate(
+    percent = 100 * region1 / (region1 + region2)
+  )
+
+# ===============================
+# Compute mean ± SEM per Genotype
+# ===============================
+final_results <- replicate_values %>%
+  group_by(Genotype) %>%
+  summarise(
+    mean_percent = mean(percent, na.rm=TRUE),
+    sem_percent  = sd(percent, na.rm=TRUE) / sqrt(n()),
+    n = n(),
+    .groups = "drop"
+  )
+
+# ===============================
+# Combine RNA helicase groups
+# ===============================
+replicate_values_grouped <- replicate_values %>%
+  mutate(Group = case_when(
+    Genotype %in% c("pDA154", "pDA156") ~ "RNA helicase mutants",
+    Genotype == "pDA98" ~ "Wildtype",
+    TRUE ~ NA_character_  # in case there are other genotypes
+  )) %>%
+  filter(!is.na(Group))  # exclude any others (like pDA102 if needed)
+
+# ===============================
+# Compute mean ± SEM per Group
+# ===============================
+final_results_grouped <- replicate_values_grouped %>%
+  group_by(Group) %>%
+  summarise(
+    mean_percent = mean(percent, na.rm = TRUE),
+    sem_percent  = sd(percent, na.rm = TRUE) / sqrt(n()),
+    n = n(),
+    .groups = "drop"
+  )
+
+# ===============================
+# t-test between Wildtype and RNA helicase mutants
+# ===============================
+
+# Subset the percent values per group
+wildtype_vals <- replicate_values_grouped$percent[replicate_values_grouped$Group == "Wildtype"]
+mutant_vals   <- replicate_values_grouped$percent[replicate_values_grouped$Group == "RNA helicase mutants"]
+
+# F-test for equal variances
+variance_test <- var.test(wildtype_vals, mutant_vals)
+variance_test
+
+t_test_result <- t.test(percent ~ Group,
+                        data = replicate_values_grouped,
+                        var.equal = FALSE,  # Welch t-test
+                        alternative = "less")  # one-sided
+t_test_result
+
+# ===============================
+# Define colors
+# ===============================
+palette_grouped <- c(
+  "Wildtype" = "blue",
+  "RNA helicase mutants" = "red"
+)
+
+# ===============================
+# Plot mean + SEM + replicate dots
+# ===============================
+ggplot() +
+  geom_col(data = final_results_grouped,
+           aes(x = Group, y = mean_percent, fill = Group),
+           width = 0.7) +
+  geom_errorbar(data = final_results_grouped,
+                aes(x = Group,
+                    ymin = mean_percent - sem_percent,
+                    ymax = mean_percent + sem_percent),
+                width = 0.2,
+                size = 0.8) +
+  geom_point(data = replicate_values_grouped,
+             aes(x = Group, y = percent),
+             color = "gray",
+             size = 2,
+             alpha = 0.6,
+             position = position_jitter(width = 0.08)) +
+  scale_fill_manual(values = palette_grouped) +
+  labs(
+    x = "Genotype group",
+    y = "Relative unmodified (%)",
+    title = paste0("t-test p-value = ", signif(t_test_result$p.value, 3))
+  ) +
+  theme_classic(base_size = 14)
+
+```
