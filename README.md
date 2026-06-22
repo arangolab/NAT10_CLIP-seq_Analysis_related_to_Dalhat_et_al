@@ -1,6 +1,6 @@
-# seCLIPseq-Analysis
-## seCLIPseq Overview
-Paired-end Illumina Novaseq X Plus seCLIP-seq was performed using a NAT10 antibody paired with input samples to capture NAT10-RNA binding sites.
+# eCLIPseq-Analysis
+## eCLIPseq Overview
+Paired-end Illumina Novaseq X Plus eCLIP-seq was performed using a NAT10 antibody paired with input samples to capture NAT10-RNA binding sites.
 
 ## FASTQ to bigWig Pipeline
 Raw reads were pre-processed to remove low quality bases, adapter sequences, and a stretch of at least 10 consecutive guanine (G) nucleotides at the 3’ end using cutadapt v 4.2. It was necessary to remove long stretches of G’s and ``` --nextseq-trim=10 ``` due to the sequencing instrument reporting high quality G’s in the absence of signal towards the end of the read.
