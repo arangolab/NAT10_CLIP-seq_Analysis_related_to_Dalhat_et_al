@@ -40,7 +40,11 @@ bamCoverage -b <BAM> -o <OUTPUT BIGWIG> --outFileFormat bigwig --normalizeUsing 
 ```
 
 ## Analysis of NAT10 peaks over 18S rRNA.
-BigWig files were analyzed using custom R code; see the file bigwig_analysis.Rmd for a complete analysis
+BigWig files were analyzed using a custom R code; see the file bigwig_analysis.Rmd for a complete analysis
+
+## Analysis of RT-stop at m1acp3Y site
+RT-stop at the m1acp3Y site was analyzed using a custom R code; see the file RT_STOP.Rmd for a complete analysis
+
 
 #### Alternative: extraction of R1 reads.
 R1 reads were extracted from the alignments using samtools to obtain reads containing information about the reverse transcription stop. 
